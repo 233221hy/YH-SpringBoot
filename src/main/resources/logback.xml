@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+<!-- 定义日志文件路径和文件名模式 -->
+<property name="LOG_PATH" value="./logs" />
+<property name="LOG_FILE" value="${LOG_PATH}/app.log" />
+
+<!-- 滚动策略配置 -->
+<appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${LOG_FILE}</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+        <!-- 按天和大小滚动，文件名格式：app.log.2026-01-01.0.gz -->
+        <fileNamePattern>${LOG_FILE}.%d{yyyy-MM-dd}.%i.gz</fileNamePattern>
+        <!-- 每个日志文件最大 500MB -->
+        <maxFileSize>500MB</maxFileSize>
+        <!-- 保留最近 30 天的日志文件 -->
+        <maxHistory>30</maxHistory>
+        <!-- 所有日志文件总大小上限为 50GB，超出后删除最旧的 -->
+        <totalSizeCap>50GB</totalSizeCap>
+    </rollingPolicy>
+    <encoder>
+        <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+    </encoder>
+</appender>
+
+<root level="WARN">
+    <appender-ref ref="FILE" />
+</root>
+</configuration>
