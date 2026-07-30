@@ -14,10 +14,23 @@ spring:
           password: 123456
           driver-class-name: com.mysql.cj.jdbc.Driver
         mhsch_1:
-          url: jdbc:mysql://127.0.0.1:3306/mhsch_23?characterEncoding=utf-8&serverTimezone=GMT%2B8
+          url: jdbc:mysql://127.0.0.1:3306/mhsch_27?characterEncoding=utf-8&serverTimezone=GMT%2B8
           username: root
           password: 123456
           driver-class-name: com.mysql.cj.jdbc.Driver
+  mail:
+    host: smtp.qq.com             #QQ邮箱smtp;
+    port: 587
+    username: 1737908265@qq.com   #发件邮箱
+    password: fixghdxxsxindifi    #对应邮箱授权码(不是邮箱密码)
+    default-encoding: utf-8       #字符编码
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
 
   data:
     redis:

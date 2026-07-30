@@ -41,7 +41,7 @@ public class SchoolDomainResolver {
      */
     public int getSchoolIdByHost(HttpServletRequest request) {
         String domain = request.getHeader("Host");
-//        domain = "yit.haiqikeji.com";
+        domain = "yit.haiqikeji.com";
         if (StringUtils.isBlank(domain)) {
             throw new BusinessException("请求域名缺失");
         }

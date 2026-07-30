@@ -6,6 +6,7 @@ import cn.xfywz.guozespring.entity.mhsch.YeeStudent;
 import cn.xfywz.guozespring.entity.vo.StudentStats;
 import cn.xfywz.guozespring.exception.BusinessException;
 import cn.xfywz.guozespring.mapper.SlSchoolMapper;
+import cn.xfywz.guozespring.service.file.MailService;
 import cn.xfywz.guozespring.service.student.YeeStudentMangerService;
 import cn.xfywz.guozespring.util.JwtTokenUtil;
 import cn.xfywz.guozespring.util.Result;
@@ -26,6 +27,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Random;
 
 import static cn.xfywz.guozespring.util.EncodePasswordUtil.encodePassword;
 
@@ -36,6 +38,8 @@ public class YeeStudentMangerServiceImpl implements YeeStudentMangerService {
     private SlSchoolMapper slSchoolMapper;
     @Autowired
     private DatabaseUtil databaseUtil;
+    @Autowired
+    private MailService mailService;
 
 
     @Override
@@ -478,36 +482,47 @@ public class YeeStudentMangerServiceImpl implements YeeStudentMangerService {
 
     @Override
     public Result forgetPassword(ResetPasswordDTO dto, int schoolId) {
+        //根据学号+学校ID 查出数据库中对应学生的邮箱
         Optional<String> storedIdCardOpt = databaseUtil.query(schoolId)
-                .sql("SELECT idCard FROM yee_student")
+                .sql("SELECT email FROM yee_student")
                 .eq("schoolId", schoolId)
                 .eq("number", dto.getStuNumber())
-                .scalar(rs -> rs.getString("idCard"));
+                .scalar(rs -> rs.getString("email"));
 
-        // 验证身份证后6位
-        boolean idCardMatches = storedIdCardOpt
-                .filter(idCard -> idCard.length() >= 6) // 先过滤：确保长度足够
-                .map(idCard -> idCard.substring(idCard.length() - 6)) // 提取后6位
-                .map(last6 -> last6.equals(dto.getIdCardLast6())) // 比对是否相等
-                .orElse(false); // 如果查不到 or 长度不足 → 返回 false
+        //验证数据库邮箱与前端传入邮箱是否相等
+        boolean emailMatch = storedIdCardOpt
+                .filter(StringUtils::isNotBlank) // 先过滤：确保长度足够
+                .map(dbEmail -> dbEmail.equals(dto.getEmail().trim())) // 比对邮箱是否相等
+                .orElse(false); // 如果查不到 → 返回 false
 
-        if (!idCardMatches) {
+        if (!emailMatch) {
             // 统一处理“用户不存在”或“验证失败”
-            return Result.error("身份证后6位验证失败");
+            return Result.error("邮箱验证失败");
         }
-        // 更新密码
+
+        //生成6位随机数字密码
+        String randomPwd = String.format("%06d", new Random().nextInt(900000));
+        String encodePwd = encodePassword(randomPwd);
+
+        //更新密码(通过邮箱)
         int rows = databaseUtil.update(Math.toIntExact(schoolId))
                 .table("yee_student")
-                .set("password", encodePassword(dto.getNewPassword()))
-                .eq("number", dto.getStuNumber())
-                .eq("schoolId", schoolId)
+                .set("password",encodePwd)
+                .eq("number",dto.getStuNumber())
+                .eq("schoolId",schoolId)
                 .update();
 
         if (rows == 0) {
             throw new BusinessException("密码更新失败，请稍后重试");
         }
 
-        return Result.success("密码重置成功");
+        //发送邮件,将临时6位密码发送到学生邮箱
+        String studentEmail = storedIdCardOpt.get();
+        String emailContent = String.format("您的新密码为: %s",randomPwd);
+        //调用邮件发送工具
+        mailService.sendSimpleMail(studentEmail, emailContent,emailContent);
+
+        return Result.success("密码重置成功,新密码已发送到预留邮箱,注意查收");
 
 
     }

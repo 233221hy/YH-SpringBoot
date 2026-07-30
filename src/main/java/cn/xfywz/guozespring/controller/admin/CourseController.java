@@ -145,9 +145,9 @@ public class CourseController {
     }
 
     //学生忘记密码
-//    @PostMapping("/stu_forget_pwd")
-//    public Result forgetPassword(@RequestBody ResetPasswordDTO dto, HttpServletRequest request) {
-//        int schoolId = schoolDomainResolver.getSchoolIdByHost(request);
-//        return yeeStudentMangerService.forgetPassword(dto, schoolId);
-//    }
+    @PostMapping("/stu_forget_pwd")
+    public Result forgetPassword(@RequestBody ResetPasswordDTO dto, HttpServletRequest request) {
+        int schoolId = schoolDomainResolver.getSchoolIdByHost(request);
+        return yeeStudentMangerService.forgetPassword(dto, schoolId);
+    }
 }
