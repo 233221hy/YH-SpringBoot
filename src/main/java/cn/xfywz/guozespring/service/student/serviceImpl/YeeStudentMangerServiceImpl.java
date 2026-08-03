@@ -500,6 +500,13 @@ public class YeeStudentMangerServiceImpl implements YeeStudentMangerService {
             return Result.error("邮箱验证失败");
         }
 
+        String stuName = databaseUtil.query(schoolId)
+                .sql("SELECT name FROM yee_student")
+                .eq("schoolId", schoolId)
+                .eq("number", dto.getStuNumber())
+                .scalar(rs -> rs.getString("name"))
+                .orElse("同学");
+
         //生成6位随机数字密码
         String randomPwd = String.format("%06d", new Random().nextInt(900000));
         String encodePwd = encodePassword(randomPwd);
@@ -518,7 +525,7 @@ public class YeeStudentMangerServiceImpl implements YeeStudentMangerService {
 
         //发送邮件,将临时6位密码发送到学生邮箱
         String studentEmail = storedIdCardOpt.get();
-        String emailContent = String.format("您的新密码为: %s",randomPwd);
+        String emailContent = String.format("%s同学,您的新密码为: %s",stuName,randomPwd);
         //调用邮件发送工具
         mailService.sendSimpleMail(studentEmail, emailContent,emailContent);
 
