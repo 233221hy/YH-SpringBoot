@@ -16,8 +16,10 @@ import cn.xfywz.guozespring.util.db.SlaveMysqlConnectionUtil;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import io.jsonwebtoken.Claims;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -28,6 +30,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 import static cn.xfywz.guozespring.util.EncodePasswordUtil.encodePassword;
 
@@ -40,6 +43,8 @@ public class YeeStudentMangerServiceImpl implements YeeStudentMangerService {
     private DatabaseUtil databaseUtil;
     @Autowired
     private MailService mailService;
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
 
 
     @Override
@@ -482,6 +487,14 @@ public class YeeStudentMangerServiceImpl implements YeeStudentMangerService {
 
     @Override
     public Result forgetPassword(ResetPasswordDTO dto, int schoolId) {
+
+        //为redis容器设置key
+        String limitKey = "forget_pwd_limit" + schoolId + ":" + dto.getStuNumber();
+        Boolean limited = stringRedisTemplate.hasKey(limitKey);
+        if (Boolean.TRUE.equals(limited)) {
+            return Result.error("操作过于频繁,请五分钟后再次尝试重置密码");
+        }
+
         //根据学号+学校ID 查出数据库中对应学生的邮箱
         Optional<String> storedIdCardOpt = databaseUtil.query(schoolId)
                 .sql("SELECT email FROM yee_student")
@@ -534,6 +547,9 @@ public class YeeStudentMangerServiceImpl implements YeeStudentMangerService {
         String emailContent = String.format("%s同学,您的新密码为: %s,请登录后及时修改重置密码",stuName,randomPwd);
         //调用邮件发送工具
         mailService.sendSimpleMail(studentEmail, emailContent,emailContent);
+
+        //密码重置成功后增加五分钟的key
+        stringRedisTemplate.opsForValue().set(limitKey, "1", 5, TimeUnit.MINUTES);
 
         return Result.success("密码重置成功,新密码已发送到预留邮箱,注意查收");
 
