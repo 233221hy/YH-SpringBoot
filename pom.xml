@@ -205,11 +205,28 @@
 
     <build>
         <finalName>${project.artifactId}-${project.version}-${build.timestamp}</finalName>
+<!--        &lt;!&ndash; 不打包yml文件1(要和下面的2一起打开才能将yml文件不打包进jar文件) &ndash;&gt;-->
+<!--        <resources>-->
+<!--            <resource>-->
+<!--                <directory>src/main/resources</directory>-->
+<!--                <excludes>-->
+<!--                    <exclude>**/*.yml</exclude>-->
+<!--                    <exclude>**/*.yaml</exclude>-->
+<!--                </excludes>-->
+<!--            </resource>-->
+<!--        </resources>-->
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
                 <version>3.2.0</version>
+<!--                &lt;!&ndash; 不打包yml文件2(要和上面的1一起打开才能将yml文件不打包进jar文件) &ndash;&gt;-->
+<!--                <configuration>-->
+<!--                    <excludes>-->
+<!--                        <exclude>**/*.yml</exclude>-->
+<!--                        <exclude>**/*.yaml</exclude>-->
+<!--                    </excludes>-->
+<!--                </configuration>-->
             </plugin>
 
             <plugin>

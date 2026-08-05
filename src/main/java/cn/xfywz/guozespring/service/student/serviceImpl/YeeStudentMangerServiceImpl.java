@@ -1,5 +1,6 @@
 package cn.xfywz.guozespring.service.student.serviceImpl;
 
+import cn.xfywz.guozespring.util.RandomPwdUtil;
 import cn.xfywz.guozespring.entity.dto.ResetPasswordDTO;
 import cn.xfywz.guozespring.entity.mhmain.SlSchool;
 import cn.xfywz.guozespring.entity.mhsch.YeeStudent;
@@ -27,7 +28,6 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.Random;
 
 import static cn.xfywz.guozespring.util.EncodePasswordUtil.encodePassword;
 
@@ -495,8 +495,14 @@ public class YeeStudentMangerServiceImpl implements YeeStudentMangerService {
                 .map(dbEmail -> dbEmail.equals(dto.getEmail().trim())) // 比对邮箱是否相等
                 .orElse(false); // 如果查不到 → 返回 false
 
+        //对应学生邮箱为空时
+        String dbEmail = storedIdCardOpt.get();
+        if (StringUtils.isEmpty(dbEmail)) {
+            return Result.error("该学生未绑定邮箱信息，无法重置密码");
+        }
+
+        // 邮箱与后端不匹配
         if (!emailMatch) {
-            // 统一处理“用户不存在”或“验证失败”
             return Result.error("邮箱验证失败");
         }
 
@@ -508,7 +514,7 @@ public class YeeStudentMangerServiceImpl implements YeeStudentMangerService {
                 .orElse("同学");
 
         //生成6位随机数字密码
-        String randomPwd = String.format("%06d", new Random().nextInt(900000));
+        String randomPwd = RandomPwdUtil.generateRandomCode(10);
         String encodePwd = encodePassword(randomPwd);
 
         //更新密码(通过邮箱)
@@ -525,7 +531,7 @@ public class YeeStudentMangerServiceImpl implements YeeStudentMangerService {
 
         //发送邮件,将临时6位密码发送到学生邮箱
         String studentEmail = storedIdCardOpt.get();
-        String emailContent = String.format("%s同学,您的新密码为: %s",stuName,randomPwd);
+        String emailContent = String.format("%s同学,您的新密码为: %s,请登录后及时修改重置密码",stuName,randomPwd);
         //调用邮件发送工具
         mailService.sendSimpleMail(studentEmail, emailContent,emailContent);
 
