@@ -465,12 +465,12 @@ public class YeeExamController {
      *
      *  教师收卷
      */
-    @PostMapping("/yee_exam_collect_exam")
-    public Result teacherBatchCollectExam(@RequestParam Integer schoolId,
-                                          @RequestParam Integer examId,
-                                          @RequestHeader String Authorization) throws Exception {
-        if (AuthTokenUtil.verifyToken(Authorization, schoolId)) {
-            return yeeStudentCourseExamService.teacherBatchCollectExam(schoolId, examId);
-        } else return Result.error("非法访问");
-    }
+//    @PostMapping("/yee_exam_collect_exam")
+//    public Result teacherBatchCollectExam(@RequestParam Integer schoolId,
+//                                          @RequestParam Integer examId,
+//                                          @RequestHeader String Authorization) throws Exception {
+//        if (AuthTokenUtil.verifyToken(Authorization, schoolId)) {
+//            return yeeStudentCourseExamService.teacherBatchCollectExam(schoolId, examId);
+//        } else return Result.error("非法访问");
+//    }
 }

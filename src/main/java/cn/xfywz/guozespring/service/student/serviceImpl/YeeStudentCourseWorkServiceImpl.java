@@ -2628,9 +2628,7 @@ public class YeeStudentCourseWorkServiceImpl implements YeeStudentCourseWorkServ
 //    }
 
 
-    // 定时10分钟，任务执行完成后延时10分钟再跑下一轮
-    // 任务跑完再等10分钟才下一轮，杜绝重叠并发
-    @Scheduled(fixedDelay = 600000)
+    @Scheduled(fixedDelay = 100000)
     public void scheduleAutoTimeoutCollectWork() {
         try {
             List<Map<String, Integer>> allSchoolWorkList = getAllSchoolWorkList();
