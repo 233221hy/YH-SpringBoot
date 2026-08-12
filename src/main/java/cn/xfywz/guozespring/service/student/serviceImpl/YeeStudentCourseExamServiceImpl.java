@@ -2685,4 +2685,613 @@ public class YeeStudentCourseExamServiceImpl implements YeeStudentCourseExamServ
         }
     }
 
+//    private void doFinishExamTransaction(Connection conn, Integer schoolId, Integer recordId, Integer examId, Integer userId, Integer courseId, int submitType) throws Exception {
+//        // 1. 查询本场所有题目，计算客观题得分（复用原有算分逻辑）
+//        List<Map<String, Object>> topicList = queryStudentExamTopicsByRecordId(schoolId, recordId);
+//        List<YeeExamAnswer> answerList = queryYeeWorkAnswers(schoolId, recordId, examId, userId, courseId);
+//        List<Map<String, Object>> answerMap = answerList.stream()
+//                .map(yeeWorkAnswer -> {
+//                    Map<String, Object> map = new HashMap<>();
+//                    map.put("id", String.valueOf(yeeWorkAnswer.getId()));
+//                    map.put("recordId", String.valueOf(yeeWorkAnswer.getRecordId()));
+//                    map.put("examId", String.valueOf(yeeWorkAnswer.getExamId()));
+//                    map.put("userId", String.valueOf(yeeWorkAnswer.getUserId()));
+//                    map.put("courseId", String.valueOf(yeeWorkAnswer.getCourseId()));
+//                    map.put("topicId", String.valueOf(yeeWorkAnswer.getTopicId()));
+//                    map.put("answer", yeeWorkAnswer.getAnswer());
+//                    return map;
+//                }).collect(Collectors.toList());
+//        List<Map<String, Object>> calculateAnswerScores = ScoreCalculator.calculateAnswerScores(topicList, answerMap);
+//
+//        // 2. 判断是否有主观题，确定最终state
+//        boolean hasSubjective = checkHasSubjectiveTopic(conn, recordId);
+//        int finalState = hasSubjective ? 2 : 3;
+//        long nowSec = System.currentTimeMillis() / 1000;
+//
+//        // 3. 更新作答得分
+//        updateAnswerScores(conn, schoolId, calculateAnswerScores);
+//
+//        // 4. 更新yee_exam_record 核心状态（区分submitType）
+//        String updateRecordSql = """
+//            UPDATE yee_exam_record
+//            SET state = ?, submitType = ?, submitTime = ?
+//            WHERE id = ? AND schoolId = ? AND state = 1
+//            """;
+//        PreparedStatement pstRecord = conn.prepareStatement(updateRecordSql);
+//        pstRecord.setInt(1, finalState);
+//        pstRecord.setInt(2, submitType);
+//        pstRecord.setInt(3, (int) nowSec);
+//        pstRecord.setInt(4, recordId);
+//        pstRecord.setInt(5, schoolId);
+//        int affectRow = pstRecord.executeUpdate();
+//        closeStatement(pstRecord);
+//        if(affectRow <= 0){
+//            // 无更新行数代表已交卷，抛出中断跳过该学生
+//            throw new SQLException("学生已完成交卷，无需重复操作");
+//        }
+//
+//        // 5. 更新课程答题统计
+//        updateExamCountForCourse(conn, schoolId, courseId, userId);
+//
+//        // 6. 更新yee_exam_score成绩表
+//        updateYeeWorkScore(conn, examId, userId, courseId, schoolId, calculateAnswerScores, finalState);
+//    }
+
+    /**
+     * 批量插入作业答题记录
+     *
+     * @param yeeWorkAnswers 答题记录列表
+     * @return 是否全部插入成功
+     * @throws Exception 插入失败
+     */
+    private boolean insertYeeWorkAnswers(List<YeeExamAnswer> yeeWorkAnswers) throws Exception {
+        if (yeeWorkAnswers == null || yeeWorkAnswers.isEmpty()) {
+            return true; // 空列表视为成功
+        }
+
+        Connection conn = null;
+        PreparedStatement st = null;
+
+        try {
+            // 1. 取第一条记录的 schoolId 用于获取数据源
+            Integer schoolId = yeeWorkAnswers.get(0).getSchoolId();
+
+            // 2. 验证学校
+            SlSchool slSchool = slSchoolMapper.selectById(schoolId);
+            if (slSchool == null || slSchool.getAllow() == 0) {
+                throw new Exception("学校不存在或未审核，schoolId=" + schoolId);
+            }
+
+            // 3. 获取主库连接（写操作）
+            conn = SlaveMysqlConnectionUtil.getConnection(slSchool);
+
+            // 4. SQL 插入语句（排除自增 id 和 addDate 虚拟列）
+            String sql = """
+            INSERT INTO yee_exam_answer 
+                (recordId, examId, topicId, answered, score, 
+                 answer, images, files, marked, hit, userId, 
+                 courseId, schoolId)
+            VALUES 
+                (?, ?, ?, ?, ?, ?, 
+                 ?, ?, ?, ?, ?, ?, 
+                 ?)
+            """;
+
+            st = conn.prepareStatement(sql);
+
+            // 5. 遍历列表，设置参数并添加到批处理
+            for (YeeExamAnswer answer : yeeWorkAnswers) {
+                st.setInt(1,  answer.getRecordId());
+                st.setInt(2,  answer.getExamId());
+                st.setInt(3,  answer.getTopicId());
+                st.setInt(4,  answer.getAnswered());
+                st.setBigDecimal(5, answer.getScore());
+                st.setString(6, answer.getAnswer());
+                st.setString(7, answer.getImages());
+                st.setString(8, answer.getFiles());
+                st.setString(9, answer.getMarked());
+                st.setInt(10, answer.getHit());
+                st.setInt(11, answer.getUserId());
+                st.setInt(12, answer.getCourseId());
+                st.setInt(13, answer.getSchoolId());
+
+                st.addBatch(); // 添加到批处理
+            }
+
+            // 6. 执行批处理
+            int[] results = st.executeBatch();
+
+            // 7. 检查批处理结果：只要不是 EXECUTE_FAILED，都视为成功
+            // 注意：SUCCESS_NO_INFO (-2) 是合法的成功状态！
+            for (int rows : results) {
+                if (rows == Statement.EXECUTE_FAILED) {
+                    return false; // 理论上很少进入这里，因失败通常抛异常
+                }
+                // 其他情况（>=0 或 -2）均视为成功
+            }
+
+            return true;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            // 记录关键上下文
+            String examId = yeeWorkAnswers.isEmpty() ? "unknown" : String.valueOf(yeeWorkAnswers.get(0).getExamId());
+            Integer userId = yeeWorkAnswers.isEmpty() ? -1 : yeeWorkAnswers.get(0).getUserId();
+            throw new Exception("批量插入 yee_exam_answer 失败，examId=" + examId +
+                    ", userId=" + userId +
+                    ", size=" + yeeWorkAnswers.size(), e);
+        } finally {
+            // 安全关闭资源
+            closeStatement(st);
+            closeConnection(conn);
+        }
+    }
+    /**
+     * 根据recordId查询本场所有题目，返回是否存在主观简答题(type=4)
+     */
+    private boolean checkHasSubjectiveTopic(Connection conn, Integer recordId) throws SQLException {
+        String sql = "SELECT EXISTS(SELECT 1 FROM yee_exam_answer a JOIN yee_exam_topic t ON a.topicId = t.id WHERE a.recordId = ? AND t.type = 4) AS hasSub";
+        PreparedStatement pst = conn.prepareStatement(sql);
+        pst.setInt(1, recordId);
+        ResultSet rs = pst.executeQuery();
+        boolean hasSub = false;
+        if(rs.next()){
+            hasSub = rs.getInt("hasSub") == 1;
+        }
+        closeResultSetAndStatement(rs, pst);
+        return hasSub;
+    }
+    private void insertYeeWorkScore(Integer workId, Integer userId, Integer courseId, Integer schoolId, String platform) throws Exception {
+        Connection conn = null;
+        PreparedStatement st = null;
+
+        try {
+            // 1. 验证学校
+            SlSchool slSchool = slSchoolMapper.selectById(schoolId);
+            if (slSchool == null || slSchool.getAllow() == 0) {
+                throw new Exception("学校不存在或未审核，schoolId=" + schoolId);
+            }
+
+            // 2. 获取主库连接（写操作）
+            conn = SlaveMysqlConnectionUtil.getConnection(slSchool);
+
+            // 3. 检查是否已存在记录，避免重复插入（基于 workId 和 userId 的唯一约束）
+            String checkSql = "SELECT COUNT(*) FROM yee_exam_score WHERE examId = ? AND userId = ?";
+            st = conn.prepareStatement(checkSql);
+            st.setInt(1, workId);
+            st.setInt(2, userId);
+            ResultSet rs = st.executeQuery();
+            int count = 0;
+            if (rs.next()) {
+                count = rs.getInt(1);
+            }
+            closeResultSetAndStatement(rs, st);
+
+            if (count > 0) {
+                // 记录已存在，无需插入
+                return;
+            }
+
+            // 4. 构建插入 SQL
+            String sql = """
+                INSERT INTO yee_exam_score 
+                (examId, userId, finalScore, state, scored, submitTime, timeCost, platform, courseId, schoolId)
+                VALUES 
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+
+            st = conn.prepareStatement(sql);
+
+            // 5. 设置参数
+            // workId
+            st.setInt(1, workId);
+            // userId
+            st.setInt(2, userId);
+            // finalScore - 初始为 0
+            st.setBigDecimal(3, new BigDecimal("0.00"));
+            // state - 初始为 1
+            st.setInt(4, 1);
+            // scored - 初始为 false (0)
+            st.setBoolean(5, false);
+            // submitTime - 当前时间戳
+            st.setInt(6, 0);
+            // timeCost - 初始为 0
+            st.setInt(7, 0);
+            // platform
+            st.setString(8, platform);
+            // courseId
+            st.setInt(9, courseId);
+            // schoolId
+            st.setInt(10, schoolId);
+
+            // 6. 执行插入
+            int rowsAffected = st.executeUpdate();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new Exception("插入 yee_exam_score 失败，workId=" + workId + ", userId=" + userId + ", courseId=" + courseId + ", schoolId=" + schoolId, e);
+        } finally {
+            // 安全关闭资源
+            closeStatement(st);
+            closeConnection(conn);
+        }
+    }
+    private void updateYeeWorkScore(Integer workId, Integer userId, Integer courseId, Integer schoolId, List<Map<String, Object>> calculateAnswerScores, int state) throws Exception {
+        Connection conn = null;
+        PreparedStatement st = null;
+
+        try {
+            // 1. 验证学校
+            SlSchool slSchool = slSchoolMapper.selectById(schoolId);
+            if (slSchool == null || slSchool.getAllow() == 0) {
+                throw new Exception("学校不存在或未审核，schoolId=" + schoolId);
+            }
+
+            // 2. 获取主库连接（写操作）
+            conn = SlaveMysqlConnectionUtil.getConnection(slSchool);
+
+            // 3. 计算总分
+            BigDecimal totalEarned = calculateAnswerScores.stream()
+                    .map(item -> (BigDecimal) item.get("earnedScore"))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            // 4. 构建更新 SQL
+            String sql = """
+                UPDATE yee_exam_score 
+                SET state = ?, 
+                    scored = 1, 
+                    submitTime = ?, 
+                    finalScore = ?,
+                    timeCost = (SELECT finishTime - startTime FROM yee_exam_record WHERE examId = ? AND userId = ? LIMIT 1)
+                WHERE examId = ? 
+                  AND userId = ?
+                  AND schoolId = ?
+                """;
+
+            st = conn.prepareStatement(sql);
+
+            // 5. 设置参数
+            // state - 动态设置状态值
+            st.setInt(1, state);
+            // submitTime - 当前时间戳
+            st.setInt(2, (int) (System.currentTimeMillis() / 1000));
+            // finalScore
+            st.setBigDecimal(3, totalEarned);
+            // timeCost 参数中的 workId 和 userId
+            st.setInt(4, workId);
+            st.setInt(5, userId);
+            // WHERE 子句参数
+            st.setInt(6, workId);
+            st.setInt(7, userId);
+            st.setInt(8, schoolId);
+
+            // 6. 执行更新
+            int rowsAffected = st.executeUpdate();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new Exception("更新 yee_exam_score 失败，examId=" + workId + ", userId=" + userId + ", courseId=" + courseId + ", schoolId=" + schoolId, e);
+        } finally {
+            // 安全关闭资源
+            closeStatement(st);
+            closeConnection(conn);
+        }
+    }
+    /**
+     * 更新课程学生表中的考试数量
+     * @param schoolId 学校ID
+     * @param courseId 课程ID
+     * @param userId 用户ID
+     * @throws Exception
+     */
+    private void updateExamCountForCourse(int schoolId, Integer courseId, Integer userId) throws Exception {
+        Connection conn = null;
+        PreparedStatement st = null;
+        ResultSet rs = null;
+
+        try {
+            // 1. 验证学校
+            SlSchool slSchool = slSchoolMapper.selectById(schoolId);
+            if (slSchool == null || slSchool.getAllow() == 0) {
+                throw new Exception("学校不存在或未审核");
+            }
+
+            // 2. 获取数据库连接
+            conn = SlaveMysqlConnectionUtil.getConnection(slSchool);
+
+            // 3. 查询该学生在该课程中的考试数量（已完成的考试记录数）
+            String countExamSql = "SELECT COUNT(*) as examCount FROM yee_exam_record WHERE courseId = ? AND userId = ? AND (state = 3 or state = 2)";
+            st = conn.prepareStatement(countExamSql);
+            st.setInt(1, courseId);
+            st.setInt(2, userId);
+            rs = st.executeQuery();
+
+            int examCount = 0;
+            if (rs.next()) {
+                examCount = rs.getInt("examCount");
+            }
+
+            closeResultSetAndStatement(rs, st);
+            rs = null;
+            st = null;
+
+            // 4. 更新 yee_course_student 表中的 examCount 字段
+            String updateSql = "UPDATE yee_course_student SET examLearned = ? WHERE courseId = ? AND studentId = ?";
+            st = conn.prepareStatement(updateSql);
+            st.setInt(1, examCount);
+            st.setInt(2, courseId);
+            st.setInt(3, userId);
+            int updateRows = st.executeUpdate();
+
+        } catch (Exception e) {
+            throw e;
+        } finally {
+            closeResultSetAndStatement(rs, st);
+            closeConnection(conn);
+        }
+    }
+    private Integer getExamFrequencyByUserAndWork(
+            Integer schoolId,
+            Integer userId,
+            Integer workId) throws Exception {
+
+        Connection conn = null;
+        PreparedStatement st = null;
+        ResultSet rs = null;
+        Integer frequency = 0; // 默认返回 null
+
+        try {
+            // 1. 验证学校
+            SlSchool slSchool = slSchoolMapper.selectById(schoolId);
+            if (slSchool == null || slSchool.getAllow() == 0) {
+                throw new Exception("学校不存在或未审核");
+            }
+
+            // 2. 获取数据库连接
+            conn = SlaveMysqlConnectionUtil.getConnection(slSchool);
+
+            // 3. 构建 SQL（精确查询 frequency）
+            String sql = """
+                SELECT 
+                    wr.frequency
+                FROM 
+                    yee_exam_record wr
+                WHERE 
+                    wr.userId = ?
+                    AND wr.examId = ?
+                """;
+
+            st = conn.prepareStatement(sql);
+
+            // 4. 设置参数
+            st.setLong(1, userId);
+            st.setLong(2, workId);
+
+            // 5. 执行查询
+            rs = st.executeQuery();
+            if (rs.next()) {
+                frequency = rs.getInt("frequency");
+            } else {
+                frequency = 0; // 没有找到匹配的记录，设置默认值
+            }
+
+            return frequency;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new Exception("查询考试记录 frequency 失败，参数：schoolId=" + schoolId +
+                    ", userId=" + userId +
+                    ", examId=" + workId, e);
+        } finally {
+            // 安全关闭资源
+            closeResultSetAndStatement(rs, st);
+            closeConnection(conn);
+        }
+    }
+    /**
+     * 插入一条考试记录，并返回自增主键 id
+     *
+     * @param record YeeExamRecord 对象
+     * @return 自增主键 id（> 0 表示成功）
+     * @throws Exception 插入失败或获取 ID 失败
+     */
+    private int insertYeeExamRecord(YeeExamRecord record) throws Exception {
+        Connection conn = null;
+        PreparedStatement st = null;
+        ResultSet rs = null;
+        int generatedId = -1;
+
+        try {
+            Integer schoolId = record.getSchoolId();
+
+            // 1. 验证学校
+            SlSchool slSchool = slSchoolMapper.selectById(schoolId);
+            if (slSchool == null || slSchool.getAllow() == 0) {
+                throw new Exception("学校不存在或未审核，schoolId=" + schoolId);
+            }
+
+            // 2. 获取主库连接
+            conn = SlaveMysqlConnectionUtil.getConnection(slSchool);
+
+            // 3. SQL 插入语句：新增 selectTopicIds 字段
+            String sql = """
+        INSERT INTO yee_exam_record 
+            (examId, userId, startTime, state, finishTime, score, 
+             isCancel, frequency, teacherId, markTime, obScore, subScore, 
+             markOrder, platform, courseId, classId, schoolId,
+             submitType, submitTime, lastActiveTime, selectTopicIds)
+        VALUES 
+            (?, ?, ?, ?, ?, ?, 
+             ?, ?, ?, ?, ?, ?, 
+             ?, ?, ?, ?, ?,
+             ?, ?, ?, ?)
+        """;
+
+            st = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+
+            st.setInt(1,  record.getExamId());
+            st.setInt(2,  record.getUserid());
+            st.setInt(3,  record.getStartTime());
+            st.setInt(4,  record.getState());
+            st.setInt(5,  record.getFinishTime());
+            st.setBigDecimal(6, record.getScore());
+            st.setInt(7,  record.getIsCancel());
+            st.setInt(8,  record.getFrequency());
+            st.setInt(9,  record.getTeacherId());
+            st.setInt(10, record.getMarkTime());
+            st.setBigDecimal(11, record.getObScore());
+            st.setBigDecimal(12, record.getSubScore());
+            st.setInt(13, record.getMarkOrder());
+            st.setString(14, record.getPlatform());
+            st.setInt(15, record.getCourseId());
+            st.setInt(16, record.getClassId());
+            st.setInt(17, record.getSchoolId());
+
+            // 3个扩展字段
+            st.setInt(18, record.getSubmitType());
+            st.setInt(19, record.getSubmitTime());
+            st.setInt(20, record.getLastActiveTime());
+
+            // 新增：selectTopicIds 赋值，第21个占位符
+            st.setString(21, record.getSelectTopicIds());
+
+            // 5. 执行插入
+            int rowsAffected = st.executeUpdate();
+
+            if (rowsAffected == 0) {
+                throw new Exception("插入 yee_exam_record 失败，影响行数为 0");
+            }
+
+            // 6. 获取自增主键
+            rs = st.getGeneratedKeys();
+            if (rs.next()) {
+                generatedId = rs.getInt(1);
+            } else {
+                throw new Exception("未能获取自增主键");
+            }
+
+            return generatedId;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new Exception("插入 yee_exam_record 失败，examId=" + record.getExamId() +
+                    ", userId=" + record.getUserid() +
+                    ", schoolId=" + record.getSchoolId(), e);
+        } finally {
+            closeResultSetAndStatement(rs, st);
+            closeConnection(conn);
+        }
+    }
+    //    private List<Map<String, Object>> getExamInfoByCourseAndStudent(
+//            Integer schoolId,
+//            Integer courseId,
+//            Integer studentId,
+//            Integer nodeId) throws Exception {
+//
+//        Connection conn = null;
+//        PreparedStatement st = null;
+//        ResultSet rs = null;
+//        List<Map<String, Object>> result = new ArrayList<>();
+//
+//        try {
+//            // 1. 验证学校
+//            SlSchool slSchool = slSchoolMapper.selectById(schoolId);
+//            if (slSchool == null || slSchool.getAllow() == 0) {
+//                throw new Exception("学校不存在或未审核");
+//            }
+//
+//            // 2. 获取数据库连接
+//            conn = SlaveMysqlConnectionUtil.getConnection(slSchool);
+//
+//            // 3. 构建动态 SQL（支持 nodeId 可选条件）
+//            StringBuilder sqlBuilder = new StringBuilder();
+//            sqlBuilder.append("""
+//                SELECT
+//                    cs.courseId,
+//                    cs.studentId,
+//                    w.id AS examId,
+//                    w.title,
+//                    w.startTime,
+//                    w.endTime,
+//                    w.score,
+//                    w.nodeId
+//                FROM
+//                    yee_course_student cs
+//                    LEFT JOIN yee_exam w ON w.courseId = cs.courseId  AND ( JSON_LENGTH(w.classList) = 0 OR JSON_CONTAINS(w.classList, CAST(cs.classId AS JSON)))
+//                WHERE
+//                    cs.courseId = ?
+//                    AND cs.studentId = ?
+//                    AND w.allow = 1
+//                    AND w.schoolId = ?
+//                """);
+//
+//            // 条件：nodeId 可选
+//            if (nodeId != null) {
+//                sqlBuilder.append(" AND w.nodeId = ? ");
+//            }
+//
+//            sqlBuilder.append("""
+//                ORDER BY
+//                    w.sequence,
+//                    w.addTime DESC
+//                """);
+//
+//            // 4. 预编译 SQL
+//            st = conn.prepareStatement(sqlBuilder.toString());
+//
+//            // 5. 设置参数
+//            int paramIndex = 1;
+//            st.setLong(paramIndex++, courseId);
+//            st.setLong(paramIndex++, studentId);
+//            st.setInt(paramIndex++, schoolId);
+//
+//            if (nodeId != null) {
+//                st.setInt(paramIndex++, nodeId);
+//            }
+//
+//            // 6. 执行查询
+//            rs = st.executeQuery();
+//
+//            // 7. 封装结果
+//            ResultSetMetaData metaData = rs.getMetaData();
+//            int columnCount = metaData.getColumnCount();
+//
+//            // 数据库是时间戳 需要转换成时间
+//            // 创建自定义格式器
+//            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+//            while (rs.next()) {
+//                Map<String, Object> row = new HashMap<>();
+//                for (int i = 1; i <= columnCount; i++) {
+//                    String columnName = metaData.getColumnLabel(i);
+//                    if ("startTime".equals(columnName) || "endTime".equals(columnName)){
+//                        long TimeSeconds = rs.getLong(columnName);
+//                        if (TimeSeconds == 0) {
+//                            row.put(columnName, rs.getObject(i));
+//                        } else {
+//                            row.put(columnName, LocalDateTime.ofInstant(
+//                                    Instant.ofEpochSecond(TimeSeconds),
+//                                    ZoneId.systemDefault()
+//                            ).format(formatter)); // 调用 .format() 转为字符串
+//                        }
+//                    } else {
+//                        row.put(columnName, rs.getObject(i));
+//                    }
+//                }
+//                result.add(row);
+//            }
+//
+//            return result;
+//
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//            throw new Exception("查询学生作业信息失败，参数：schoolId=" + schoolId +
+//                    ", courseId=" + courseId +
+//                    ", studentId=" + studentId +
+//                    ", nodeId=" + nodeId, e);
+//        } finally {
+//            // 安全关闭资源
+//            closeResultSetAndStatement(rs, st);
+//            closeConnection(conn);
+//        }
+//    }
 }
