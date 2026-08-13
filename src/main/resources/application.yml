@@ -9,14 +9,14 @@ spring:
       primary: mhmain
       datasource:
         mhmain:
-          url: jdbc:mysql://nj-cdb-hq9uquar.sql.tencentcdb.com:63971/mhmain?characterEncoding=utf-8&serverTimezone=GMT%2B8
+          url: jdbc:mysql://127.0.0.1：3306/mhmain?characterEncoding=utf-8&serverTimezone=GMT%2B8
           username: root
-          password: gzsxdfsadfdss#@123
+          password: 123456
           driver-class-name: com.mysql.cj.jdbc.Driver
         mhsch_1:
-          url: jdbc:mysql://nj-cdb-hq9uquar.sql.tencentcdb.com:63971/mhsch_1?characterEncoding=utf-8&serverTimezone=GMT%2B8
+          url: jdbc:mysql://127.0.0.1：3306/mhsch_23?characterEncoding=utf-8&serverTimezone=GMT%2B8
           username: root
-          password: gzsxdfsadfdss#@123
+          password: 123456
           driver-class-name: com.mysql.cj.jdbc.Driver
 
   data:
@@ -76,7 +76,6 @@ server:
 #    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 cos:
-
   secretId: ${TENCENT_SECRET_ID}
   secretKey: ${TENCENT_SECRET_KEY}
   region: ap-nanjing
