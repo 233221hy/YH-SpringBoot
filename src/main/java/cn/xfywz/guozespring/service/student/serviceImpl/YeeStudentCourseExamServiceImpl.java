@@ -109,6 +109,7 @@ public class YeeStudentCourseExamServiceImpl implements YeeStudentCourseExamServ
                 }
                 work.put("canEnter", canEnter);
                 work.put("enterTip", enterTip);
+                work.put("examStatus", examStatus);
             }
 
             Map<String, Object> resultMap = new HashMap<>();

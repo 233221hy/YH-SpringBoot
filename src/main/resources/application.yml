@@ -9,12 +9,12 @@ spring:
       primary: mhmain
       datasource:
         mhmain:
-          url: jdbc:mysql://127.0.0.1:3306/mhmain?characterEncoding=utf-8&serverTimezone=GMT%2B8
+          url: jdbc:mysql://127.0.0.1：3306/mhmain?characterEncoding=utf-8&serverTimezone=GMT%2B8
           username: root
           password: 123456
           driver-class-name: com.mysql.cj.jdbc.Driver
         mhsch_1:
-          url: jdbc:mysql://127.0.0.1:3306/mhsch_23?characterEncoding=utf-8&serverTimezone=GMT%2B8
+          url: jdbc:mysql://127.0.0.1：3306/mhsch_23?characterEncoding=utf-8&serverTimezone=GMT%2B8
           username: root
           password: 123456
           driver-class-name: com.mysql.cj.jdbc.Driver
@@ -89,6 +89,8 @@ server:
 #    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 cos:
+  secretId: ${TENCENT_SECRET_ID}
+  secretKey: ${TENCENT_SECRET_KEY}
   region: ap-nanjing
   bucketName: guozejiaoyu-1317857445
 sts:
