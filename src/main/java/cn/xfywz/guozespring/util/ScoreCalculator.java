@@ -96,22 +96,22 @@ public class ScoreCalculator {
                         if (topic == null) {
                             return buildEmptyAnswerResult(resultItem, new Topic(null, 0, Collections.emptyList()), 3, BigDecimal.ZERO);
                         }
-
                         Object answerObj = answerItem.get("answer");
-
                         boolean isBlankAnswer = false;
                         Map<String, Object> userAnswerMap = new HashMap<>();
 
                         if (answerObj instanceof Map) {
                             @SuppressWarnings("unchecked")
                             Map<String, Object> map = (Map<String, Object>) answerObj;
+                            userAnswerMap = map;
+                            // 只有前端空白模板{a1:""}才判定为空作答
                             if (!map.isEmpty() && map.keySet().stream().anyMatch(k ->
                                     k != null && k.toString().matches("a\\d+"))) {
                                 isBlankAnswer = true;
-                                userAnswerMap = map;
                             }
                         } else if (answerObj instanceof String) {
                             String str = ((String) answerObj).trim();
+                            // JSON格式作答{"a1":"B"}
                             if (str.startsWith("{") && str.endsWith("}")) {
                                 try {
                                     userAnswerMap = OBJECT_MAPPER.readValue(str, Map.class);
@@ -120,11 +120,14 @@ public class ScoreCalculator {
                                     }
                                 } catch (Exception ignored) {}
                             }
+                            // 新增关键：纯字符串A/B/C/D 不标记为空白作答，放行正常判分
                         }
 
+                         // 分支逻辑修正
                         if (isBlankAnswer) {
                             return handleBlankQuestion(resultItem, topic, userAnswerMap);
                         } else {
+                            // 调用你原来原生的判分方法，参数不变
                             return handleSelectionQuestion(resultItem, topic, answerObj);
                         }
 
@@ -263,6 +266,7 @@ public class ScoreCalculator {
 
         return resultItem;
     }
+
 
     private static Map<String, Object> buildEmptyAnswerResult(
             Map<String, Object> resultItem,

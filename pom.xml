@@ -205,13 +205,14 @@
 
     <build>
         <finalName>${project.artifactId}-${project.version}-${build.timestamp}</finalName>
-<!--        &lt;!&ndash; 不打包yml文件1(要和下面的2一起打开才能将yml文件不打包进jar文件) &ndash;&gt;-->
 <!--        <resources>-->
 <!--            <resource>-->
+<!--                &lt;!&ndash; 原始资源目录 &ndash;&gt;-->
 <!--                <directory>src/main/resources</directory>-->
 <!--                <excludes>-->
-<!--                    <exclude>**/*.yml</exclude>-->
-<!--                    <exclude>**/*.yaml</exclude>-->
+<!--                    &lt;!&ndash; 打包时排除这两个核心配置文件 &ndash;&gt;-->
+<!--                    <exclude>application.yml</exclude>-->
+<!--                    <exclude>application.properties</exclude>-->
 <!--                </excludes>-->
 <!--            </resource>-->
 <!--        </resources>-->
@@ -220,13 +221,14 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
                 <version>3.2.0</version>
-<!--                &lt;!&ndash; 不打包yml文件2(要和上面的1一起打开才能将yml文件不打包进jar文件) &ndash;&gt;-->
-<!--                <configuration>-->
-<!--                    <excludes>-->
-<!--                        <exclude>**/*.yml</exclude>-->
-<!--                        <exclude>**/*.yaml</exclude>-->
-<!--                    </excludes>-->
-<!--                </configuration>-->
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- 打包跳过单元测试 -->
+                    <skipTests>true</skipTests>
+                </configuration>
             </plugin>
 
             <plugin>

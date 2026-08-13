@@ -1,2 +1,18 @@
-/mvnw text eol=lf
+# 1. 强制所有文本文件统一使用 LF (Linux风格换行符)
+# 这是最推荐的跨平台做法，能彻底消除那个警告
+* text=auto eol=lf
+
+# 2. 针对 Windows 专属脚本保留 CRLF (防止脚本运行报错)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 3. 确保二进制文件不被 Git 修改
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.jar binary
+*.zip binary
+* text=auto eol=lf
+*.bat text eol=crlf
 *.cmd text eol=crlf

@@ -24,6 +24,6 @@ public interface YeeStudentCourseExamService {
 
     Result finishExamAnswer(int schoolId, Integer courseId, Integer userId, Integer examId, Integer recordId) throws Exception;
 
-    Result teacherBatchCollectExam(int schoolId, Integer examId) throws Exception;
+//    Result teacherBatchCollectExam(int schoolId, Integer examId) throws Exception;
 }
 
