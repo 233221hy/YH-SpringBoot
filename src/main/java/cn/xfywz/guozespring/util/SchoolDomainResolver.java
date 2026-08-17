@@ -41,13 +41,31 @@ public class SchoolDomainResolver {
      */
     public int getSchoolIdByHost(HttpServletRequest request) {
         String domain = request.getHeader("Host");
-//        domain = "bxait.haiqikeji.com";
+        if(domain != null && domain.contains(":")){
+            domain = domain.split(":")[0];
+        }
+        int schoolId = domainSchoolIdCache.get(domain, this::loadSchoolIdFromDb);
+
         if (StringUtils.isBlank(domain)) {
             throw new BusinessException("请求域名缺失");
         }
+        if(schoolId <= 0){
+            log.error("域名解析失败！domain={},解析得到schoolId={}",domain,schoolId);
+            throw new BusinessException("无法识别当前租户域名，访问被拒绝");
+        }
 
-        return domainSchoolIdCache.get(domain, this::loadSchoolIdFromDb);
+        return schoolId;
     }
+
+//    public int getSchoolIdByHost(HttpServletRequest request) {
+//        String domain = request.getHeader("Host");
+////        domain = "bxait.haiqikeji.com";
+//        if (StringUtils.isBlank(domain)) {
+//            throw new BusinessException("请求域名缺失");
+//        }
+//
+//        return domainSchoolIdCache.get(domain, this::loadSchoolIdFromDb);
+//    }
 
     /**
      * 从数据库加载 schoolId（供缓存调用）
