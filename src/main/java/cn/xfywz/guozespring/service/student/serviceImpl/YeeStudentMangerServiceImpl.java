@@ -1,5 +1,6 @@
 package cn.xfywz.guozespring.service.student.serviceImpl;
 
+import cn.xfywz.guozespring.util.EmailUtil;
 import cn.xfywz.guozespring.util.RandomPwdUtil;
 import cn.xfywz.guozespring.entity.dto.ResetPasswordDTO;
 import cn.xfywz.guozespring.entity.mhmain.SlSchool;
@@ -493,6 +494,11 @@ public class YeeStudentMangerServiceImpl implements YeeStudentMangerService {
         Boolean limited = stringRedisTemplate.hasKey(limitKey);
         if (Boolean.TRUE.equals(limited)) {
             return Result.error("操作过于频繁,请五分钟后再次尝试重置密码");
+        }
+
+        String frontEmail = dto.getEmail().trim();
+        if (!EmailUtil.isAllowEmail(frontEmail)) {
+            return Result.error("暂不支持此邮箱格式，请使用国内常用个人邮箱");
         }
 
         //根据学号+学校ID 查出数据库中对应学生的邮箱
