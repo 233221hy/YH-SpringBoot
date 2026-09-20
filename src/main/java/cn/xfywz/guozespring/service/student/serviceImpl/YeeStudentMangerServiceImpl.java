@@ -493,12 +493,22 @@ public class YeeStudentMangerServiceImpl implements YeeStudentMangerService {
         String limitKey = "forget_pwd_limit" + schoolId + ":" + dto.getStuNumber();
         Boolean limited = stringRedisTemplate.hasKey(limitKey);
         if (Boolean.TRUE.equals(limited)) {
-            return Result.error("操作过于频繁,请五分钟后再次尝试重置密码");
+            return Result.error("操作过于频繁,请两分钟后再次尝试重置密码");
         }
 
         String frontEmail = dto.getEmail().trim();
         if (!EmailUtil.isAllowEmail(frontEmail)) {
             return Result.error("暂不支持此邮箱格式，请使用国内常用个人邮箱");
+        }
+
+        //先判断前端传入的学号是否存在
+        Optional<String> stunumber = databaseUtil.query(schoolId)
+                .sql("SELECT number FROM yee_student")
+                .eq("schoolId",schoolId)
+                .eq("number",dto.getStuNumber())
+                .scalar(rs -> rs.getString("number"));
+        if (stunumber.isEmpty()) {
+            return Result.error("学号不存在,请检查学号是否正确");
         }
 
         //根据学号+学校ID 查出数据库中对应学生的邮箱
@@ -536,6 +546,21 @@ public class YeeStudentMangerServiceImpl implements YeeStudentMangerService {
         String randomPwd = RandomPwdUtil.generateRandomCode(10);
         String encodePwd = encodePassword(randomPwd);
 
+        //发送邮件,将临时6位密码发送到学生邮箱
+        String studentEmail = storedIdCardOpt.get();
+        String emailContent = String.format("%s同学,您的新密码为: %s,请登录后及时修改重置密码",stuName,randomPwd);
+        //调用邮件发送工具
+        try {
+            mailService.sendSimpleMail(studentEmail, "密码重置通知",emailContent);
+        } catch (Exception e) {
+            log.error("发送重置密码邮件异常", e);
+            String msg = e.getMessage();
+            if(msg != null && msg.contains("550")){
+                return Result.error("该邮箱不存在或无法接收邮箱,请核对邮箱");
+            }
+            return Result.error("邮件发送失败，请稍后重试");
+        }
+
         //更新密码(通过邮箱)
         int rows = databaseUtil.update(Math.toIntExact(schoolId))
                 .table("yee_student")
@@ -548,16 +573,10 @@ public class YeeStudentMangerServiceImpl implements YeeStudentMangerService {
             throw new BusinessException("密码更新失败，请稍后重试");
         }
 
-        //发送邮件,将临时6位密码发送到学生邮箱
-        String studentEmail = storedIdCardOpt.get();
-        String emailContent = String.format("%s同学,您的新密码为: %s,请登录后及时修改重置密码",stuName,randomPwd);
-        //调用邮件发送工具
-        mailService.sendSimpleMail(studentEmail, emailContent,emailContent);
+        //密码重置成功后增加两分钟的key
+        stringRedisTemplate.opsForValue().set(limitKey, "1", 2, TimeUnit.MINUTES);
 
-        //密码重置成功后增加五分钟的key
-        stringRedisTemplate.opsForValue().set(limitKey, "1", 5, TimeUnit.MINUTES);
-
-        return Result.success("密码重置成功,新密码已发送到预留邮箱,注意查收");
+        return Result.success("密码重置申请已提交，邮件正在投递，若2分钟未收到邮件，请核对邮箱地址后重新提交重置");
 
 
     }
