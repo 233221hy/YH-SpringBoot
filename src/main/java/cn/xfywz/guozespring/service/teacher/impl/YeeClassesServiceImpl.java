@@ -90,6 +90,12 @@ public class YeeClassesServiceImpl implements YeeClassesService {
         if (slSchool == null || slSchool.getAllow() == 0) {
             throw new RuntimeException("学校不存在或未审核");
         }
+        //统一将创建班级中的中文括号改为英文括号
+        if (c.getName() != null) {
+            String className = c.getName();
+            className = className.replace('（', '(').replace('）', ')');
+            c.setName(className);
+        }
         StringBuilder cols = new StringBuilder("INSERT INTO yee_classes (");
         StringBuilder vals = new StringBuilder("VALUES (");
         List<Object> params = new ArrayList<>();
