@@ -77,6 +77,9 @@ public class StudentExcelData implements Serializable {
         phone = ExcelDataPreprocessor.basicClean(phone);
         college = ExcelDataPreprocessor.basicClean(college);
         stuClass = ExcelDataPreprocessor.basicClean(stuClass);
+        if(stuClass != null) {
+            stuClass = stuClass.replace('(','(').replace(')',')');
+        }
         grade = ExcelDataPreprocessor.basicClean(grade);
     }
 
