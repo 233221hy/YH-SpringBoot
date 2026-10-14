@@ -518,17 +518,12 @@ public class YeeStudentMangerServiceImpl implements YeeStudentMangerService {
                 .eq("number", dto.getStuNumber())
                 .scalar(rs -> rs.getString("email"));
 
-        //验证数据库邮箱与前端传入邮箱是否相等
-        boolean emailMatch = storedIdCardOpt
-                .filter(StringUtils::isNotBlank) // 先过滤：确保长度足够
-                .map(dbEmail -> dbEmail.equals(dto.getEmail().trim())) // 比对邮箱是否相等
-                .orElse(false); // 如果查不到 → 返回 false
-
         //对应学生邮箱为空时
-        String dbEmail = storedIdCardOpt.get();
-        if (StringUtils.isEmpty(dbEmail)) {
+        String dbEmail = storedIdCardOpt.orElse(null);
+        if (StringUtils.isBlank(dbEmail)) {
             return Result.error("该学生未绑定邮箱信息，无法重置密码");
         }
+        boolean emailMatch = dbEmail.equals(dto.getEmail().trim());
 
         // 邮箱与后端不匹配
         if (!emailMatch) {
