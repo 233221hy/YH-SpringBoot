@@ -44,6 +44,9 @@ public class FileService extends ServiceImpl<CosFileMapper, CosFile> {
     private final CosFilePartMapper cosFilePartMapper;
     private final StsService stsService;
 
+    // 最大允许普通用户上传 500MB
+    private static final long MAX_NORMAL_UPLOAD_SIZE = 500 * 1024 * 1024L;
+
     /**
      * 初始化分片上传（使用 UUID 生成唯一 objectKey）
      */
@@ -94,6 +97,9 @@ public class FileService extends ServiceImpl<CosFileMapper, CosFile> {
         }
         if (fileSize == null || fileSize <= 0) {
             return FileResult.error("文件大小无效");
+        }
+        if (fileSize > MAX_NORMAL_UPLOAD_SIZE) {
+            return FileResult.error("文件大小超过500MB，请联系管理员上传");
         }
         if (fileHash == null || fileHash.isEmpty()) {
             return FileResult.error("文件哈希不能为空");
